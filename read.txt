@@ -1,0 +1,29 @@
+1.只做了张张嘴
+2.传给后端的是第一张是被出来的人脸firstfaceImg
+3.控制人脸识别框展示不展示的是.app-container增加或删除active类
+    if (navigator.mediaDevices) {
+        console.log('当前设备可调用摄像头')
+        $('.app-container').addClass('active')
+
+    } else if (navigator.getUserMedia) {
+        console.log('当前设备可调用摄像头')
+        $('.app-container').addClass('active')
+    } else {
+        $('.app-container').removeClass('active')
+        alert("当前设备不支持打开摄像头或无此权限！");
+    }
+4.后端所有处理逻辑在sendImg()接口回调中
+ $.post('/sendImg',{
+        imgSrc: base64Img
+    },(result)=>{
+        // TODO
+        // 这里根据后端校验返回结果做不同的处理结果
+        if(result.code == '100'){
+            // 验证不通过
+            $('#tipTxt').html('验证不通过');
+            this.resetFun()
+        }
+    })
+5.运行
+全局安装 http-server 或 live-server
+cmd命令行中运行http-server 或 live-server
