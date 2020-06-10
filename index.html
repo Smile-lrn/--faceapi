@@ -20,11 +20,18 @@
             </div>
             <div>
                 <img :src="imgSrc" alt="" class="imgSrc" id="imgSrc">
+                <canvas id="canvas_show"></canvas>
             </div>
         </div>
     </div>
     <script src="/js/jquery2.0.js"></script>
     <script src="/js/flexible.js"></script>
+    <!-- 用于口罩检测 -->
+    <!-- <script src="https://file.aizoo.com/js/face-api.min.js"></script> -->
+    <!-- <script src="https://file.aizoo.com/js/aizoo.min.js"></script> -->
+    <!-- <script src="./js/aizoo.min.js"></script> -->
+    <!-- <script src="https://file.aizoo.com/js/load-image.all.min.js"></script>
+        <script src="/js/face-mask-detection.js"></script> -->
     <!-- 开发环境版本，包含了有帮助的命令行警告 -->
     <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
     <!-- 生产环境版本，优化了尺寸和速度 -->
@@ -32,12 +39,12 @@
     <!-- 引入face.js -->
     <!-- <script src="./faceJs/face.js" type="module"></script> -->
     <script src="/js/face-api.js"></script>
-    <!-- 用于口罩检测 -->
-    <!-- <script src="https://file.aizoo.com/js/face-api.min.js"></script> -->
-    <script src="https://file.aizoo.com/js/aizoo.min.js"></script>
-    <!-- <script src="./js/aizoo.min.js"></script> -->
-    <script src="https://file.aizoo.com/js/load-image.all.min.js"></script>
+
     <script>
+        window.onload = function(){
+        console.log(faceAnalysis)
+
+        }
         var userface = {
             tipTxt: '模型初始化中...',
             vid: document.querySelector('#myVideo'),
@@ -64,9 +71,8 @@
             firstfaceImg: '',
             getPhotoNum: 0,//调取getPhotoNum的次数
             // 判断是否可以调起摄像头
-            callTheCamera:function () {
+            callTheCamera:function (callback) {
                 var _this = this;
-                // navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
                 window.URL = window.URL || window.webkitURL || window.msURL || window.mozURL;
                 navigator.mediaDevices = navigator.mediaDevices || ((navigator.mozGetUserMedia || navigator.webkitGetUserMedia) ? {
                     getUserMedia: function (c) {
@@ -76,16 +82,18 @@
                         });
                     }
                 } : null);
-                if (!navigator.mediaDevices) {
-                    throw new Error("getUserMedia() not supported.");
-                }
+                navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+                // if (!navigator.mediaDevices) {
+                //     throw new Error("getUserMedia() not supported.");
+                // }
                 if (navigator.mediaDevices) {
                     console.log('当前设备可调用摄像头')
                     $('.app-container').addClass('active')
-
+                    callback()
                 } else if (navigator.getUserMedia) {
                     console.log('当前设备可调用摄像头')
                     $('.app-container').addClass('active')
+                    callback();
                 } else {
                     $('.app-container').removeClass('active')
                     alert("当前设备不支持打开摄像头或无此权限！");
@@ -95,7 +103,7 @@
             },
             // 初始化  加载模型
             initFun() {
-                const video = this.vid; const canvas = this.overlay;
+                const video = this.vid|| document.querySelector('#myVideo'); const canvas = this.overlay;
                 // 加载神经网络模型
                 Promise.all([ // 加载我想要使用的模型 同时对应的json文件和shard文件要处在同一目录 不然读取的时候可能读取不到。当你读取不到的时候你可能会报 SyntaxError: Unexpected token < in JSON at position 0。这点略坑
                     faceapi.nets.tinyFaceDetector.loadFromUri('/src/assets/models'),
@@ -107,10 +115,12 @@
                         { video: {} },
                         stream => {
                             video.srcObject = stream
-                            this.palyFlag = true
+                            userface.palyFlag = true
+                            document.querySelector('#tipTxt').innerHTML = '模型加载成功,请将脸放在圆框正中间'
+                            userface.onPlay()
                         },
                         err => {
-                            this.palyFlag = false
+                            userface.palyFlag = false
                             console.error(err)
                             if(err == 'Requested device not found'){
                                 alert('没有发现摄像头设备')
@@ -265,8 +275,8 @@
 
             }
         };
-        userface.callTheCamera();
-        userface.initFun();
+        userface.callTheCamera(userface.initFun);
+        // userface.initFun();
     </script>
 
 </body>
