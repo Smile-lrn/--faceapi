@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8">
-    <title>faceapi</title>
+    <title>身份验证</title>
     <link rel="stylesheet" href="/css/index.css">
     <style></style>
 </head>
@@ -12,18 +12,25 @@
     <div class="app-container">
         <div class="warpper">
             <!-- 提示信息 -->
+            <div class="btnBox">
+                <img src="./imgs/close.svg" alt="" srcset="">
+            </div>
             <p class="tip" id="tipTxt">模型初始化中...</p>
             <div class="photoBox">
                 <video onPlay="userface.onPlay(this)" ref="myVideo" id="myVideo" preload="auto" loop playsinline muted autoplay
                     webkit-playsinline="true"></video>
-                <canvas id="overlay" ref="overlay" />
+                <canvas id="overlay" ref="overlay"></canvas>
+                <span id="hoverTxt" class="hovertxt"></span>
             </div>
-            <div>
+            <div style="display: none;">
                 <img :src="imgSrc" alt="" class="imgSrc" id="imgSrc">
-                <canvas id="canvas_show"></canvas>
+            </div>
+            <div class="safeBox">
+                <img src="./imgs/safe.png" alt="" srcset=""><span>信息已加密,仅用于身份认证</span>
             </div>
         </div>
     </div>
+    <!-- <script src="/js/init.js"></script> -->
     <script src="/js/jquery2.0.js"></script>
     <script src="/js/flexible.js"></script>
     <!-- 用于口罩检测 -->
@@ -39,12 +46,9 @@
     <!-- 引入face.js -->
     <!-- <script src="./faceJs/face.js" type="module"></script> -->
     <script src="/js/face-api.js"></script>
+    <script src="js/vconsole.min.js"></script>
 
     <script>
-        window.onload = function(){
-        console.log(faceAnalysis)
-
-        }
         var userface = {
             tipTxt: '模型初始化中...',
             vid: document.querySelector('#myVideo'),
@@ -71,7 +75,7 @@
             firstfaceImg: '',
             getPhotoNum: 0,//调取getPhotoNum的次数
             // 判断是否可以调起摄像头
-            callTheCamera:function (callback) {
+            callTheCamera: function (callback) {
                 var _this = this;
                 window.URL = window.URL || window.webkitURL || window.msURL || window.mozURL;
                 navigator.mediaDevices = navigator.mediaDevices || ((navigator.mozGetUserMedia || navigator.webkitGetUserMedia) ? {
@@ -103,7 +107,7 @@
             },
             // 初始化  加载模型
             initFun() {
-                const video = this.vid|| document.querySelector('#myVideo'); const canvas = this.overlay;
+                const video = this.vid || document.querySelector('#myVideo'); const canvas = this.overlay;
                 // 加载神经网络模型
                 Promise.all([ // 加载我想要使用的模型 同时对应的json文件和shard文件要处在同一目录 不然读取的时候可能读取不到。当你读取不到的时候你可能会报 SyntaxError: Unexpected token < in JSON at position 0。这点略坑
                     faceapi.nets.tinyFaceDetector.loadFromUri('/src/assets/models'),
@@ -116,14 +120,22 @@
                         stream => {
                             video.srcObject = stream
                             userface.palyFlag = true
-                            document.querySelector('#tipTxt').innerHTML = '模型加载成功,请将脸放在圆框正中间'
+                            setTimeout(() => {
+                                document.querySelector('#tipTxt').innerHTML = '请确保正对手机，光线充足'
+                            }, 400)
                             userface.onPlay()
                         },
                         err => {
                             userface.palyFlag = false
-                            console.error(err)
-                            if(err == 'Requested device not found'){
-                                alert('没有发现摄像头设备')
+                            // console.error(err)
+                            if (err.PERMISSION_DENIED) {
+                                alert('用户拒绝了浏览器请求媒体的权限', '提示');
+                            } else if (err.NOT_SUPPORTED_ERROR) {
+                                alert('对不起，您的浏览器不支持拍照功能，请使用其他浏览器', '提示');
+                            } else if (err.MANDATORY_UNSATISFIED_ERROR) {
+                                alert('指定的媒体类型未接收到媒体流', '提示');
+                            } else {
+                                alert('系统未能获取到摄像头，请确保摄像头已正确安装。或尝试刷新页面，重试', '提示');
                             }
                         }
                     );
@@ -134,7 +146,12 @@
                 var that = this;
                 const video = this.vid; const canvas = this.overlay; const vid_width = document.querySelector('#myVideo').videoWidth || 200; const vid_height = document.querySelector('#myVideo').videoHeight || 200;
                 if (this.vid.paused || this.vid.ended || !this.palyFlag) {
-                    return setTimeout(() => this.onPlay())
+                    return setTimeout(() => 
+                    {
+                        video.autoplay
+                        this.onPlay()
+                    }
+                    )
                 }
                 const displaySize = { width: vid_width, height: vid_height }; // 这部分的大小是等同video的大小的
                 faceapi.matchDimensions(canvas, displaySize); // 声明大小
@@ -147,18 +164,24 @@
                     displaySize
                 );
                 if (resizedDetections.length == 0) {
-                    document.querySelector('#tipTxt').innerHTML = '未检测到人脸'
+                    // document.querySelector('#hoverTxt').innerHTML = '未检测到人脸'
+                    this.setHoverTxt('未检测到人脸')
                     // return
                 } else {
                     // console.log(resizedDetections[0].alignedRect.relativeBox.bottom)
                     // 限定人脸在圆框中展示的位置
-                    if (resizedDetections[0].alignedRect.relativeBox.top > 0.55 || resizedDetections[0].alignedRect.relativeBox.left < 0.2 || resizedDetections[0].alignedRect.relativeBox.right > 0.8 || resizedDetections[0].alignedRect.relativeBox.bottom > 0.98) {
-                        document.querySelector('#tipTxt').innerHTML = '请将脸移入圆框中间'
+                    console.log(resizedDetections[0].alignedRect.relativeBox.bottomLeft.x , resizedDetections[0].alignedRect.relativeBox.bottomRight.x  )
+                    if (resizedDetections[0].alignedRect.relativeBox.bottomLeft.x<0.2 || resizedDetections[0].alignedRect.relativeBox.bottomLeft.x > 0.5 ) {
+                        // document.querySelector('#hoverTxt').innerHTML = '请将脸正对中间'
+                        this.setHoverTxt('请将脸正对中间')
+                    }else if(resizedDetections[0].alignedRect.relativeBox.bottomLeft.y >1.5){
+                        this.setHoverTxt('距离太近请调整')
                     } else {
                         if (this.getPhotoNum == 0) {
                             this.getPhoto();
                         }
-                        document.querySelector('#tipTxt').innerHTML = '请张张嘴巴'
+                        this.setHoverTxt('请张张嘴巴')
+                        // document.querySelector('#hoverTxt').innerHTML = '请张张嘴巴'
                         const landmarks = resizedDetections[0].landmarks;
                         const landmarkPositions = landmarks.positions
                         // 或者得到各个轮廓的位置，
@@ -198,11 +221,13 @@
                 var mouth_distance = positions[67].y - positions[63].y;
                 var nose_distance_y = positions[31].y; var nose_distance_x = positions[31].x;
                 // console.log(Math.abs(nose_distance_x-this.last_nose_distance_x))
-                if (Math.abs(nose_distance_y - this.last_nose_distance_y) > 3 && Math.abs(this.last_nose_distance_x - nose_distance_x) > 4) {
-                    document.querySelector('#tipTxt').innerHTML = '请保持头部不要晃动'
-                } else {
-                    document.querySelector('#tipTxt').innerHTML = '请张张嘴巴'
-                }
+                // if (Math.abs(nose_distance_y - this.last_nose_distance_y) > 3 && Math.abs(this.last_nose_distance_x - nose_distance_x) > 4) {
+                //     // document.querySelector('#hoverTxt').innerHTML = '请保持头部不要晃动'
+                //     this.setHoverTxt('请保持头部不要晃动')
+                // } else {
+                    this.setHoverTxt('请张张嘴巴')
+                    // document.querySelector('#hoverTxt').innerHTML = '请张张嘴巴'
+                // }
                 this.last_nose_distance_y = nose_distance_y;
                 this.last_nose_distance_x = nose_distance_x;
                 if (this.last_mouth_distance > 0 && mouth_distance > 0 && (Math.abs(this.last_mouth_distance - mouth_distance) > 6) && (Math.abs(this.last_nose_distance_y - nose_distance_y) < 0.6 && Math.abs(this.last_nose_distance_x - nose_distance_x) < 0.6)) {
@@ -211,6 +236,7 @@
                     if (this.mouthNum > 1) {
                         console.log('张嘴通过')
                         document.querySelector('#tipTxt').innerHTML = '验证中，请稍等...'
+                        $('.photoBox').children().hide()
                         this.isOpenMouth = true;
                         this.last_mouth_distance = 0;
                         this.mouthNum = 0;
@@ -237,46 +263,68 @@
                 }
                 // setTimeout(()=>{
                 //     this.resetFun()
-                // },1000)
+                // },2000)
                 // 把该图片数据传给后端  做相关校验
             },
             // 重置参数
             resetFun() {
                 this.last_nose_distance_y = 0;
                 this.last_nose_distance_x = 0;
-                this.last_mouth_distance=0;
+                this.last_mouth_distance = 0;
                 this.last_nose_left = 0;
                 this.last_nose_top = 0;
                 this.last_dis_eye_norse = 0;
                 this.lastTime = 0;
                 this.isTwinkle = false;
-                this.isOpenMouth=false;
-                this.first_outline_l=[];
-                this.first_outline_r=[];
-                this.mouthNum=0;
-                this.firstfaceImg='';
-                this.imgSrc='';
-                document.querySelector('#imgSrc').setAttribute('src','')
-                this.getPhotoNum=0;
+                this.isOpenMouth = false;
+                this.first_outline_l = [];
+                this.first_outline_r = [];
+                this.mouthNum = 0;
+                this.firstfaceImg = '';
+                this.imgSrc = '';
+                document.querySelector('#tipTxt').innerHTML = '请确保正对手机，光线充足'
+                document.querySelector('#imgSrc').setAttribute('src', '')
+                this.getPhotoNum = 0;
+                $('.photoBox').children().show()
                 this.onPlay();
             },
             // 调用接口发送截图
-            sendImg(base64Img){
-                $.post('/sendImg',{
-                   imgSrc: base64Img
-                },(result)=>{
-                    // 这里根据后端校验返回结果做不同的处理结果
-                    if(result.code == '100'){
-                        // 验证不通过
-                        $('#tipTxt').html('验证不通过');
-                        this.resetFun()
-                    }
-                })
+            sendImg(base64Img) {
+                window.clearTimeout();
+                setTimeout(() => {
+                    this.resetFun()
+                }, 1000)
+                // $.post('/sendImg', {
+                //     imgSrc: base64Img
+                // }, (result) => {
+                //     // 这里根据后端校验返回结果做不同的处理结果
+                //     if (result.code == '100') {
+                //         // 验证不通过
+                //         this.setHoverTxt('验证不通过');
+                //         // $('#hoverTxt').html('验证不通过');
+                //         this.resetFun()
+                //     }
+                // },()=>{
+                // })
 
+            },
+            setHoverTxt(val) {
+                // $('#hoverTxt').css('top','-150px')
+                $('#hoverTxt').removeClass('active');
+                if (val) {
+                    $('#hoverTxt').addClass('active');
+                } else {
+                    $('#hoverTxt').removeClass('active');
+                }
+                $('#hoverTxt').html(val)
             }
         };
+        $('.warpper .btnBox img').click(function(){
+            $('.app-container').removeClass('active')
+            userface.resetFun();
+        })
         userface.callTheCamera(userface.initFun);
-        // userface.initFun();
+            // userface.initFun();
     </script>
 
 </body>

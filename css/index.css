@@ -19,15 +19,14 @@
     height: 100%;
     display: flex;
     box-sizing: border-box;
-    padding-top: 30px;
     flex-direction: column;
     align-items: center;
-    background: rgba(0, 0, 0, 0.6);
+    /* background: rgba(0, 0, 0, 0.6); */
     
   }
 .app-container  .warpper .tip {
-    font-size: 0.5625rem;
-    color: #fff;
+    font-size: 0.4625rem;
+    color:#333;
     margin-bottom: 1.25rem;
     height: 0.625rem;
 }
@@ -35,11 +34,14 @@
     width:5.625rem;
     height:5.625rem;
     border-radius: 50%;
-    border: 2px dashed red;
+    /* border: 2px dashed red; */
+    box-shadow: 0 0 10px rgba(0,0,0,.2);
     box-sizing: border-box;
     position: relative;
     overflow: hidden;
-    margin-bottom: 30px;
+    margin-bottom: 0.9375rem;
+    background: url(../imgs/circlebg.png) no-repeat;
+    background-size: cover;
     
 }
 .app-container  .warpper .photoBox video,
@@ -54,4 +56,54 @@
 .app-container  .warpper .imgSrc{
     width: 6.25rem;
     height: auto;
+}
+.app-container  .warpper .hovertxt{
+    display: flex;
+    position: absolute;
+    width: 100%;
+    height: 1.5rem;
+    color:#fff;
+    background: rgba(0,0,0,.6);
+    justify-content: center;
+    align-items: center;
+    font-size: 0.4rem;
+    top: -1.5rem;
+    transition: 0.2s;
+    -webkit-transition:;
+    -moz-transition:;
+    -ms-transition:;
+    -o-transition:;
+}
+.app-container  .warpper .hovertxt.active{
+    top: 0 !important;
+    transition: 0.2s;
+    -webkit-transition: 0.2s;
+    -moz-transition: 0.2s;
+    -ms-transition: 0.2s;
+    -o-transition: 0.2s;
+}
+
+.app-container  .warpper .btnBox{
+    width: 100%;
+    height: 1.875rem;
+    display: flex;
+    margin-bottom: 0.625rem;
+    padding-left: 0.625rem;
+    padding-top: 0.625rem;
+    box-sizing: border-box;
+}
+.app-container  .warpper .btnBox img{
+    width: 0.575rem;
+    height: 0.575rem;
+}
+.app-container  .warpper .safeBox{
+    display: flex;
+    align-items: center;
+    font-size: 0.3rem;
+    color: #999;
+}
+.app-container  .warpper .safeBox img{
+    width: 0.5rem;
+    height: 0.5rem;
+    margin-right: 10px;
 }

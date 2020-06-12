@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>faceapi</title>
+    <base href="${rootPath.contextPath }/" />
+    <link rel="stylesheet" href="static/face/css/index.css">
+</head>
+
+<body>
+<div class="app-container">
+    <div class="warpper">
+        <div class="btnBox">
+            <img src="./imgs/close.svg" alt="" srcset="">
+        </div>
+        <!-- 提示信息 -->
+        <p class="tip" id="tipTxt">模型初始化中...</p>
+        <div class="photoBox">
+            <video onPlay="userface.onPlay(this)" ref="myVideo" id="myVideo" preload="auto" loop playsinline muted autoplay
+                   webkit-playsinline="true"></video>
+            <canvas id="overlay" ref="overlay"></canvas>
+            <span id="hoverTxt" class="hovertxt"></span>
+        </div>
+        <div style="display: none">
+            <img :src="imgSrc" alt="" class="imgSrc" id="imgSrc">
+        </div>
+        <div class="safeBox">
+            <img src="./imgs/safe.png" alt="" srcset=""><span>信息已加密,仅用于身份认证</span>
+        </div>
+    </div>
+</div>
+<script src="static/face/js/jquery2.0.js"></script>
+<script src="static/face/js/flexible.js"></script>
+<!-- 开发环境版本，包含了有帮助的命令行警告 -->
+<!-- <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script> -->
+<!-- 生产环境版本，优化了尺寸和速度 -->
+<!-- <script src="https://cdn.jsdelivr.net/npm/vue"></script> -->
+<!-- 引入face.js -->
+<!-- <script src="./faceJs/face.js" type="module"></script> -->
+<script src="static/face/js/face-api.js"></script>
+<script>
+
+    var tryNum = 0;
+    var userface = {
+        tipTxt: '模型初始化中...',
+        vid: document.querySelector('#myVideo'),
+        vid_width: 200,
+        vid_height: 200,
+        overlay: document.querySelector('#overlay'),
+        overlayCC: document.querySelector('#overlay').getContext('2d'),
+        palyFlag: false,
+        isOpenMouth: false, // 张嘴是否通过
+        isTwinkle: false, // 眨眼是否通过
+        last_mouth_distance: 0, // 上一次嘴巴张开的高度
+        imgSrc: '', // 截图
+        mouthNum: 0, // 张嘴次数
+        last_nose_distance_y: 0, // 上一次鼻子的垂直坐标
+        last_nose_distance_x: 0, // 上一次鼻子的水平坐标
+        lastTime: 0, // 时间因素
+        last_DIF: 0, // 记录上一次左右两边距离差值
+        first_outline_l: [], // 存储每次识别到人脸时左轮廓线中间点距离鼻点的距离
+        first_outline_r: [], // 存储每次识别到人脸时右轮廓线中间点距离鼻点的距离
+        counter: 0, // 向左或向右的次数,
+        last_nose_left: 0,
+        last_nose_top: 0,
+        last_dis_eye_norse: 0,
+        firstfaceImg: '',
+        getPhotoNum: 0,//调取getPhotoNum的次数
+        // 判断是否可以调起摄像头
+        callTheCamera:function () {
+            var _this = this;
+            // navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+            window.URL = window.URL || window.webkitURL || window.msURL || window.mozURL;
+            navigator.mediaDevices = navigator.mediaDevices || ((navigator.mozGetUserMedia || navigator.webkitGetUserMedia) ? {
+                getUserMedia: function (c) {
+                    return new Promise(function (y, n) {
+                        (navigator.mozGetUserMedia ||
+                            navigator.webkitGetUserMedia).call(navigator, c, y, n);
+                    });
+                }
+            } : null);
+            /*if (!navigator.mediaDevices) {
+                throw new Error("getUserMedia() not supported.");
+            }*/
+            if (navigator.mediaDevices) {
+                console.log('当前设备可调用摄像头')
+                $('.app-container').addClass('active')
+
+            } else if (navigator.getUserMedia) {
+                console.log('当前设备可调用摄像头')
+                $('.app-container').addClass('active')
+            } else {
+                $('.app-container').removeClass('active')
+                alert("当前设备不支持打开摄像头或无此权限！");
+            }
+
+            // vid.addEventListener('canplay', _this.enablestart, false);
+        },
+        // 初始化  加载模型
+        initFun() {
+            const video = this.vid; const canvas = this.overlay;
+            // 加载神经网络模型
+            Promise.all([ // 加载我想要使用的模型 同时对应的json文件和shard文件要处在同一目录 不然读取的时候可能读取不到。当你读取不到的时候你可能会报 SyntaxError: Unexpected token < in JSON at position 0。这点略坑
+                faceapi.nets.tinyFaceDetector.loadFromUri('static/face/src/assets/models'),
+                faceapi.nets.faceLandmark68Net.loadFromUri('static/face/src/assets/models'),
+                faceapi.nets.faceRecognitionNet.loadFromUri('static/face/src/assets/models'),
+                faceapi.nets.faceExpressionNet.loadFromUri('static/face/src/assets/models')
+            ]).then(() => {
+                navigator.getUserMedia(
+                    { video: {} },
+                    stream => {
+                        video.srcObject = stream
+                        this.palyFlag = true
+                        setTimeout(() => {
+                            document.querySelector('#tipTxt').innerHTML = '请确保正对手机，正在检测人脸'
+                        }, 400)
+                    },
+                    err => {
+                        this.palyFlag = false
+                        if (err.PERMISSION_DENIED) {
+                            alert('用户拒绝了浏览器请求媒体的权限', '提示');
+                        } else if (err.NOT_SUPPORTED_ERROR) {
+                            alert('对不起，您的浏览器不支持拍照功能，请使用其他浏览器', '提示');
+                        } else if (err.MANDATORY_UNSATISFIED_ERROR) {
+                            alert('指定的媒体类型未接收到媒体流', '提示');
+                        } else {
+                            alert('系统未能获取到摄像头，请确保摄像头已正确安装。或尝试刷新页面，重试', '提示');
+                        }
+                    }
+                );
+            }); // 载入成功之后唤醒摄像头
+        },
+        // 视频流监听
+        onPlay: async function (event) {
+            var that = this;
+            const video = this.vid; const canvas = this.overlay; const vid_width = document.querySelector('#myVideo').videoWidth || 200; const vid_height = document.querySelector('#myVideo').videoHeight || 200;
+            if (this.vid.paused || this.vid.ended || !this.palyFlag) {
+                return setTimeout(() => this.onPlay())
+            }
+            const displaySize = { width: vid_width, height: vid_height }; // 这部分的大小是等同video的大小的
+            faceapi.matchDimensions(canvas, displaySize); // 声明大小
+            const detections = await faceapi
+                .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 128 }))
+                .withFaceLandmarks()
+                .withFaceExpressions();
+            const resizedDetections = faceapi.resizeResults(
+                detections,
+                displaySize
+            );
+            if (resizedDetections.length == 0) {
+                // document.querySelector('#tipTxt').innerHTML = '未检测到人脸'
+                this.setHoverTxt('未检测到人脸');
+                // return
+            } else {
+                // console.log(resizedDetections[0].alignedRect.relativeBox.bottom)
+                // 限定人脸在圆框中展示的位置
+                if (resizedDetections[0].alignedRect.relativeBox.top > 0.55 || resizedDetections[0].alignedRect.relativeBox.left < 0.2 || resizedDetections[0].alignedRect.relativeBox.right > 0.8 || resizedDetections[0].alignedRect.relativeBox.bottom > 0.98) {
+                    // document.querySelector('#tipTxt').innerHTML = '请将脸移入圆框中间'
+                    this.setHoverTxt('请将脸正对中间')
+                } else {
+                    if (this.getPhotoNum == 0) {
+                        this.getPhoto();
+                    }
+                    this.setHoverTxt('请张张嘴巴')
+                    // document.querySelector('#tipTxt').innerHTML = '请张张嘴巴'
+                    const landmarks = resizedDetections[0].landmarks;
+                    const landmarkPositions = landmarks.positions
+                    // 或者得到各个轮廓的位置，
+                    // 仅适用于68点面部标记(FaceLandmarks68)
+                    // const jawOutline = landmarks.getJawOutline()
+                    // const nose = landmarks.getNose()
+                    // const mouth = landmarks.getMouth()
+                    // const leftEye = landmarks.getLeftEye()
+                    // const rightEye = landmarks.getRightEye()
+                    // const leftEyeBbrow = landmarks.getLeftEyeBrow()
+                    // const rightEyeBrow = landmarks.getRightEyeBrow()
+                    if (!this.isOpenMouth) {
+                        // 张张嘴判断
+                        this.openMouth(landmarkPositions)
+                        // 摇头
+                        // this.shakeHead(landmarkPositions)
+                        // 眨眼睛
+                        // this.twinkle(landmarkPositions)
+                    } else if (!this.isTwinkle) {
+                        // this.twinkle(landmarkPositions);
+                    }
+                    // faceapi.draw.drawFaceLandmarks(canvas, resizedDetections);
+                }
+                // faceapi.draw.drawDetections(canvas, resizedDetections);
+                // faceapi.draw.drawFaceExpressions(canvas, resizedDetections);
+            }
+            if (this.isOpenMouth) {
+                // 截图
+                this.getPhoto();
+            } else {
+                setTimeout(() => this.onPlay())
+            }
+        },
+        // 张嘴判断
+        openMouth: function (positions) {
+            // 63:上嘴唇底部中间点 67：下嘴唇顶部中间点
+            var mouth_distance = positions[67].y - positions[63].y;
+            var nose_distance_y = positions[31].y; var nose_distance_x = positions[31].x;
+            // console.log(Math.abs(nose_distance_x-this.last_nose_distance_x))
+            if (Math.abs(nose_distance_y - this.last_nose_distance_y) > 3 && Math.abs(this.last_nose_distance_x - nose_distance_x) > 4) {
+                // document.querySelector('#tipTxt').innerHTML = '请保持头部不要晃动'
+                this.setHoverTxt('请保持头部不要晃动')
+            } else {
+                this.setHoverTxt('请张张嘴巴')
+                // document.querySelector('#tipTxt').innerHTML = '请张张嘴巴'
+            }
+            this.last_nose_distance_y = nose_distance_y;
+            this.last_nose_distance_x = nose_distance_x;
+            if (this.last_mouth_distance > 0 && mouth_distance > 0 && (Math.abs(this.last_mouth_distance - mouth_distance) > 6) && (Math.abs(this.last_nose_distance_y - nose_distance_y) < 0.6 && Math.abs(this.last_nose_distance_x - nose_distance_x) < 0.6)) {
+                // document.querySelector('#tipTxt').innerHTML='张嘴通过请再眨下眼睛'
+                this.mouthNum++;
+                if (this.mouthNum > 1) {
+                    console.log('张嘴通过')
+                    document.querySelector('#tipTxt').innerHTML = '验证中，请稍等...'
+                    $('.photoBox').children().hide()
+                    this.isOpenMouth = true;
+                    this.last_mouth_distance = 0;
+                    this.mouthNum = 0;
+                }
+            }
+            this.last_mouth_distance = mouth_distance;
+        },
+        // 截取视频中符合条件的图片
+        getPhoto: function () {
+            this.getPhotoNum++;
+            this.overlayCC.clearRect(0, 0, this.overlay.width, this.overlay.height);
+            this.overlayCC.drawImage(this.vid, 0, 0, this.overlay.width, this.overlay.height)
+            // let dataUrl = overlay.toDataURL('image/jpeg', 1);
+            // imgbase64 = dataUrl.replace(/^data:image\/\w+;base64,/, "");
+            var snapData = this.overlay.toDataURL('image/png');
+            var imgSrc = 'data:image/png;' + snapData;
+            // 符合张嘴的那一张
+            if (this.getPhotoNum == 1) {
+                // 识别出的第一张人脸
+                this.firstfaceImg = imgSrc
+            } else {
+                document.querySelector('#imgSrc').setAttribute('src', imgSrc)
+                this.sendImg(this.firstfaceImg)
+            }
+            // 把该图片数据传给后端  做相关校验
+        },
+        // 重置参数
+        resetFun() {
+            this.last_nose_distance_y = 0;
+            this.last_nose_distance_x = 0;
+            this.last_mouth_distance=0;
+            this.last_nose_left = 0;
+            this.last_nose_top = 0;
+            this.last_dis_eye_norse = 0;
+            this.lastTime = 0;
+            this.isTwinkle = false;
+            this.isOpenMouth=false;
+            this.first_outline_l=[];
+            this.first_outline_r=[];
+            this.mouthNum=0;
+            this.firstfaceImg='';
+            this.imgSrc='';
+            document.querySelector('#tipTxt').innerHTML = '请确保正对手机，正在检测人脸'
+            document.querySelector('#imgSrc').setAttribute('src','')
+            this.getPhotoNum=0;
+            $('.photoBox').children().show()
+            this.onPlay();
+        },
+        // 调用接口发送截图
+        sendImg(base64Img){
+            // TODO
+            $('#tipTxt').html('正在验证，请稍后。。。');
+            $.post('seal/auth/user/face',{
+                bizCode:"${bizCode}",
+                data :base64Img
+            },(result)=>{
+                debugger;
+                // 这里根据后端校验返回结果做不同的处理结果
+                if(!result.success){
+                    var faceObj = this;
+                    $('#tipTxt').html("人脸认证不通过，请再试一次");
+                    window.clearTimeout();
+                    window.setTimeout(function () {
+                        tryNum++;
+                        faceObj.resetFun();
+                    },2500);
+                }else {
+                    alert("跳转到成功界面");
+                }
+            })
+        },
+        setHoverTxt(val) {
+            // $('#hoverTxt').css('top','-150px')
+            $('#hoverTxt').removeClass('active');
+            if (val) {
+                $('#hoverTxt').addClass('active');
+            } else {
+                $('#hoverTxt').removeClass('active');
+            }
+            $('#hoverTxt').html(val)
+        }
+    };
+    $('.warpper .btnBox img').click(function () {
+        $('.app-container').removeClass('active')
+        userface.resetFun();
+    })
+    userface.callTheCamera();
+    userface.initFun();
+</script>
+
+</body>
+
+</html>
